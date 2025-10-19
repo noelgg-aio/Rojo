@@ -6,6 +6,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  transpilePackages: ['@supabase/supabase-js'],
 }
 
 export default nextConfig
