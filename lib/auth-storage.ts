@@ -5,6 +5,17 @@ const ENCRYPTION_KEY = "roblox-ai-studio-secure-key-2024"
 
 export type { User }
 
+function getUserIP(): string {
+  if (typeof window === "undefined") return "unknown"
+  // In production, this would be fetched from server
+  let ip = localStorage.getItem("user_ip")
+  if (!ip) {
+    ip = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
+    localStorage.setItem("user_ip", ip)
+  }
+  return ip
+}
+
 export const authStorage = {
   getCurrentUser: async (): Promise<User | null> => {
     try {
@@ -57,11 +68,11 @@ export const authStorage = {
           .from('users')
           .select('*')
           .eq('id', data.user.id)
-          .single()
+          .maybeSingle()
 
         if (profile) {
           // Update last IP
-          const userIP = this.getUserIP()
+          const userIP = getUserIP()
           await supabase
             .from('users')
             .update({ last_ip: userIP })
@@ -80,64 +91,88 @@ export const authStorage = {
 
   signup: async (email: string, username: string, nickname: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> => {
     try {
-      // Check if user already exists
-      const { data: existingUser } = await supabase
+      // Check if email already exists
+      const { data: existingEmailUser } = await supabase
         .from('users')
         .select('id')
         .eq('email', email)
-        .single()
+        .maybeSingle()
 
-      if (existingUser) {
+      if (existingEmailUser) {
         return { success: false, error: 'Email already registered' }
+      }
+
+      // Check if username already exists
+      const { data: existingUsernameUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .maybeSingle()
+
+      if (existingUsernameUser) {
+        return { success: false, error: 'Username already taken' }
+      }
+
+      // Check if nickname already exists
+      const { data: existingNicknameUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('nickname', nickname)
+        .maybeSingle()
+
+      if (existingNicknameUser) {
+        return { success: false, error: 'Nickname already taken' }
       }
 
       // Check if IP is banned
       const userIP = this.getUserIP()
       const ipBanResult = await this.checkIPBan(userIP)
-      if (ipBanResult.banned) {
+      if (ipBanResult && ipBanResult.banned) {
         return { success: false, error: 'Your IP address is banned' }
       }
 
       // Hash password
       const passwordHash = CryptoJS.SHA256(password + ENCRYPTION_KEY).toString()
 
-      // Create user in database first
-      const { data: newUser, error: insertError } = await supabase
-        .from('users')
-        .insert({
-          email,
-          username,
-          nickname,
-          password_hash: passwordHash,
-          is_admin: false,
-          role: 'user',
-          last_ip: userIP,
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        return { success: false, error: insertError.message }
-      }
-
-      // Create Supabase auth user (this will send confirmation email)
+      // Create Supabase auth user first (this will send confirmation email)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            user_id: newUser.id,
+            username,
+            nickname,
+            password_hash: passwordHash,
+            is_admin: false,
+            role: 'user',
+            last_ip: userIP,
           }
         }
       })
 
       if (authError) {
-        // If auth signup fails, we should probably delete the user we just created
-        // But for now, return the error
         return { success: false, error: authError.message }
       }
 
-      return { success: true, user: newUser }
+      if (authData.user) {
+        // The user profile will be created automatically by a database trigger
+        // or we can create it manually if needed
+        const newUser = {
+          id: authData.user.id,
+          email: authData.user.email!,
+          username,
+          nickname,
+          passwordHash,
+          isAdmin: false,
+          role: 'user' as const,
+          createdAt: authData.user.created_at,
+          lastIp: userIP,
+        }
+
+        return { success: true, user: newUser }
+      }
+
+      return { success: false, error: 'Signup failed' }
     } catch (error) {
       console.error('Signup error:', error)
       return { success: false, error: 'An error occurred during signup' }
@@ -234,16 +269,5 @@ export const authStorage = {
       console.error('Error checking IP ban:', error)
       return { banned: false }
     }
-  },
-
-  getUserIP: (): string => {
-    if (typeof window === "undefined") return "unknown"
-    // In production, this would be fetched from server
-    let ip = localStorage.getItem("user_ip")
-    if (!ip) {
-      ip = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
-      localStorage.setItem("user_ip", ip)
-    }
-    return ip
   },
 }

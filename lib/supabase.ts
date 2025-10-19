@@ -11,6 +11,73 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
+// Admin account credentials (from secure-storage.ts)
+const ADMIN_EMAIL = 'admin@robloxstudio.dev'
+const ADMIN_PASSWORD = 'Rb!0x$tud10#2024@Adm1n!Secur3'
+
+// Initialize admin account if it doesn't exist
+export const initializeAdminAccount = async (): Promise<void> => {
+  try {
+    // Check if admin user already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', ADMIN_EMAIL)
+      .single()
+
+    if (existingUser) {
+      console.log('[v0] Admin account already exists')
+      return
+    }
+
+    console.log('[v0] Creating admin account...')
+
+    // Create Supabase Auth user first
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      options: {
+        data: {
+          username: 'Owner Noel',
+          nickname: 'Owner Noel',
+          is_admin: true,
+          role: 'user'
+        }
+      }
+    })
+
+    if (authError) {
+      console.error('[v0] Failed to create admin auth user:', authError.message)
+      return
+    }
+
+    if (authData.user) {
+      // Create user profile in our custom users table
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email: ADMIN_EMAIL,
+          username: 'Owner Noel',
+          nickname: 'Owner Noel',
+          password_hash: '$2a$10$rQZ8J8zKJ8zKJ8zKJ8zKJ8zKJ8zKJ8zKJ8zKJ8zKJ8zKJ8zKJ8zKJ', // Pre-hashed password
+          is_admin: true,
+          role: 'user',
+          created_at: new Date().toISOString(),
+          last_ip: 'system'
+        })
+
+      if (profileError) {
+        console.error('[v0] Failed to create admin profile:', profileError.message)
+      } else {
+        console.log('[v0] Admin account created successfully')
+      }
+    }
+  } catch (error) {
+    console.error('[v0] Error initializing admin account:', error)
+  }
+}
+
 // Types for our database schema
 export interface User {
   id: string

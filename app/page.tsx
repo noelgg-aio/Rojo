@@ -1,6 +1,10 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import type { Project } from "@/lib/project-storage"
+import { projectStorage } from "@/lib/project-storage"
+import { authStorage, type User } from "@/lib/auth-storage"
+import { initializeAdminAccount } from "@/lib/supabase"
 import { ExplorerPanel } from "@/components/explorer-panel"
 import { ScriptEditor } from "@/components/script-editor"
 import { ChatPanel } from "@/components/chat-panel"
@@ -17,10 +21,6 @@ import { AnimatedMessage } from "@/components/animated-message"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Sparkles } from "lucide-react"
-import type { Project } from "@/lib/project-storage"
-import { projectStorage } from "@/lib/project-storage"
-import { authStorage, type User } from "@/lib/auth-storage"
-import { secureStorage } from "@/lib/secure-storage"
 
 const initialExplorerData = [
   {
@@ -122,6 +122,9 @@ export default function RobloxAIStudio() {
 
   useEffect(() => {
     const initializeAuth = async () => {
+      // Initialize admin account first
+      await initializeAdminAccount()
+
       const user = await authStorage.getCurrentUser()
       if (user) {
         // Check if user account still exists
