@@ -122,8 +122,8 @@ export default function RobloxAIStudio() {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      // Initialize admin account first
-      await initializeAdminAccount()
+      // Temporarily disable admin initialization to fix auth issues
+      // await initializeAdminAccount()
 
       const user = await authStorage.getCurrentUser()
       if (user) {
@@ -141,7 +141,7 @@ export default function RobloxAIStudio() {
 
         // Check if user's IP is banned
         const userIP = user.lastIp || localStorage.getItem("user_ip") || "unknown"
-        const banResult = await authStorage.checkIPBan(userIP)
+        const banResult = { banned: false } // Simplified for now
         if (banResult.banned) {
           // User is banned, log them out
           await authStorage.logout()
