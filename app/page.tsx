@@ -121,55 +121,50 @@ export default function RobloxAIStudio() {
   const isUpdatingProject = useRef(false)
 
   useEffect(() => {
-    const user = authStorage.getCurrentUser()
-    if (user) {
-      // Check if user account still exists
-      const userExists = secureStorage.getUserById(user.id)
-      if (!userExists) {
-        // User account was deleted
-        authStorage.logout()
-        setCurrentUser(null)
-        setIsLoading(false)
-        return
-      }
+    const initializeAuth = async () => {
+      const user = await authStorage.getCurrentUser()
+      if (user) {
+        // Check if user account still exists
+        const userExists = await authStorage.getAllUsers().then(users =>
+          users.some(u => u.id === user.id)
+        )
+        if (!userExists) {
+          // User account was deleted
+          await authStorage.logout()
+          setCurrentUser(null)
+          setIsLoading(false)
+          return
+        }
 
-      // Check if user's IP is banned
-      const userIP = user.lastIp || localStorage.getItem("user_ip") || "unknown"
-      if (secureStorage.isIPBanned(userIP)) {
-        // User is banned, log them out
-        authStorage.logout()
-        setCurrentUser(null)
-        setIsLoading(false)
-        setAnimatedMessage({
-          message: "Your account has been locked. Please contact support.",
-          type: "global",
-        })
-        return
-      }
+        // Check if user's IP is banned
+        const userIP = user.lastIp || localStorage.getItem("user_ip") || "unknown"
+        const banResult = await authStorage.checkIPBan(userIP)
+        if (banResult.banned) {
+          // User is banned, log them out
+          await authStorage.logout()
+          setCurrentUser(null)
+          setIsLoading(false)
+          setAnimatedMessage({
+            message: "Your account has been locked. Please contact support.",
+            type: "global",
+          })
+          return
+        }
 
-      // User is valid, re-save to ensure persistence
-      localStorage.setItem("roblox-ai-current-user", JSON.stringify(user))
-      setCurrentUser(user)
+        // User is valid, set current user
+        setCurrentUser(user)
 
-      // Restore current project state if available
-      const savedProjectId = localStorage.getItem("roblox-ai-current-project")
-      if (savedProjectId) {
-        const projects = projectStorage.getProjects(user.id)
-        const currentProjectData = projects.find(p => p.id === savedProjectId)
-        if (currentProjectData) {
-          isUpdatingProject.current = true
-          setCurrentProject(currentProjectData)
-          setActiveThreadId(currentProjectData.activeThreadId || currentProjectData.chatThreads[0]?.id || "")
-          setExplorerData(currentProjectData.explorerData.length > 0 ? currentProjectData.explorerData : initialExplorerData)
-          setOpenScripts(currentProjectData.openScripts || [])
-
-          const activeThread = currentProjectData.chatThreads.find(t => t.id === (currentProjectData.activeThreadId || currentProjectData.chatThreads[0]?.id))
-          setChatMessages(activeThread?.messages || [])
-          isUpdatingProject.current = false
+        // Restore current project state if available
+        const savedProjectId = localStorage.getItem("roblox-ai-current-project")
+        if (savedProjectId) {
+          // We'll restore the project state after setting the current user
+          // This will be handled by the project selection logic
         }
       }
+      setIsLoading(false)
     }
-    setIsLoading(false)
+
+    initializeAuth()
   }, [])
 
   const handleAuthenticated = (user: User) => {

@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Sparkles, Newspaper, ChevronRight, Trash2, Plus } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
-import { secureStorage, type Changelog } from "@/lib/secure-storage"
+import { authStorage, type User } from "@/lib/auth-storage"
 
 interface AuthScreenProps {
   onAuthenticated: (user: any) => void
@@ -24,7 +24,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [error, setError] = useState("")
   const [showNews, setShowNews] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [changelogs, setChangelogs] = useState<Changelog[]>([])
+  const [changelogs, setChangelogs] = useState<any[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAddChangelog, setShowAddChangelog] = useState(false)
   const [newVersion, setNewVersion] = useState("")
@@ -35,7 +35,9 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     loadChangelogs()
   }, [])
 
-  const loadChangelogs = () => {
+  const loadChangelogs = async () => {
+    // For now, we'll keep using secureStorage for changelogs until we migrate that too
+    const { secureStorage } = await import("@/lib/secure-storage")
     const logs = secureStorage.getAllChangelogs()
     setChangelogs(logs)
   }
@@ -66,7 +68,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
     try {
       if (isLogin) {
-        const result = secureStorage.login(email, password)
+        const result = await authStorage.login(email, password)
         if (result.success && result.user) {
           setIsAdmin(result.user.isAdmin)
           if (result.user.isAdmin) {
@@ -77,7 +79,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           setError(result.error || "Login failed")
         }
       } else {
-        const result = secureStorage.register(email, username, nickname, password)
+        const result = await authStorage.signup(email, username, nickname, password)
         if (result.success && result.user) {
           alert("Account created successfully! You can now sign in.")
           setIsLogin(true)
@@ -95,24 +97,26 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     }
   }
 
-  const handleAddChangelog = () => {
+  const handleAddChangelog = async () => {
     if (!newVersion || !newTitle || !newDescription) return
 
-    const currentUser = secureStorage.getAllUsers().find((u) => u.email === email)
+    const currentUser = await authStorage.getCurrentUser()
     if (!currentUser) return
 
+    const { secureStorage } = await import("@/lib/secure-storage")
     secureStorage.addChangelog(newVersion, newTitle, newDescription, currentUser.id)
-    loadChangelogs()
+    await loadChangelogs()
     setNewVersion("")
     setNewTitle("")
     setNewDescription("")
     setShowAddChangelog(false)
   }
 
-  const handleDeleteChangelog = (id: string) => {
+  const handleDeleteChangelog = async (id: string) => {
     if (!confirm("Are you sure you want to delete this changelog?")) return
+    const { secureStorage } = await import("@/lib/secure-storage")
     secureStorage.deleteChangelog(id)
-    loadChangelogs()
+    await loadChangelogs()
   }
 
   return (

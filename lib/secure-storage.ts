@@ -20,7 +20,7 @@ export interface User {
   passwordHash: string
   isAdmin: boolean
   role: "user" | "helper" | "tester" | "early_access"
-  createdAt: number
+  createdAt: string  // Changed to string to match Supabase timestamp format
   lastIp?: string
 }
 
@@ -100,7 +100,7 @@ export const secureStorage = {
         passwordHash: hashPassword(ADMIN_PASSWORD),
         isAdmin: true,
         role: "user",
-        createdAt: Date.now(),
+        createdAt: new Date().toISOString(),
       }
       users.push(adminUser)
       this.saveUsers(users)
@@ -165,7 +165,7 @@ export const secureStorage = {
       passwordHash: hashPassword(password),
       isAdmin: false,
       role: "user",
-      createdAt: Date.now(),
+      createdAt: new Date().toISOString(),
       lastIp: userIp,
     }
 
