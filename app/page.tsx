@@ -5,6 +5,7 @@ import type { Project } from "@/lib/project-storage"
 import { projectStorage } from "@/lib/project-storage"
 import { authStorage, type User } from "@/lib/auth-storage"
 import { initializeAdminAccount } from "@/lib/supabase"
+import { setupAdminAccount } from "@/lib/admin-setup"
 import { ExplorerPanel } from "@/components/explorer-panel"
 import { ScriptEditor } from "@/components/script-editor"
 import { ChatPanel } from "@/components/chat-panel"
@@ -122,8 +123,8 @@ export default function RobloxAIStudio() {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      // Temporarily disable admin initialization to fix auth issues
-      // await initializeAdminAccount()
+      // Set up admin account first
+      await setupAdminAccount()
 
       const user = await authStorage.getCurrentUser()
       if (user) {
