@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { ExplorerPanel } from "@/components/explorer-panel"
 import { ScriptEditor } from "@/components/script-editor"
 import { ChatPanel } from "@/components/chat-panel"
@@ -118,6 +118,8 @@ export default function RobloxAIStudio() {
     type: "owner" | "admin" | "global"
   } | null>(null)
 
+  const isUpdatingProject = useRef(false)
+
   useEffect(() => {
     const user = authStorage.getCurrentUser()
     if (user) {
@@ -148,6 +150,24 @@ export default function RobloxAIStudio() {
       // User is valid, re-save to ensure persistence
       localStorage.setItem("roblox-ai-current-user", JSON.stringify(user))
       setCurrentUser(user)
+
+      // Restore current project state if available
+      const savedProjectId = localStorage.getItem("roblox-ai-current-project")
+      if (savedProjectId) {
+        const projects = projectStorage.getProjects(user.id)
+        const currentProjectData = projects.find(p => p.id === savedProjectId)
+        if (currentProjectData) {
+          isUpdatingProject.current = true
+          setCurrentProject(currentProjectData)
+          setActiveThreadId(currentProjectData.activeThreadId || currentProjectData.chatThreads[0]?.id || "")
+          setExplorerData(currentProjectData.explorerData.length > 0 ? currentProjectData.explorerData : initialExplorerData)
+          setOpenScripts(currentProjectData.openScripts || [])
+
+          const activeThread = currentProjectData.chatThreads.find(t => t.id === (currentProjectData.activeThreadId || currentProjectData.chatThreads[0]?.id))
+          setChatMessages(activeThread?.messages || [])
+          isUpdatingProject.current = false
+        }
+      }
     }
     setIsLoading(false)
   }, [])
@@ -164,6 +184,8 @@ export default function RobloxAIStudio() {
     setActiveScript(null)
     setChatMessages([])
     setExplorerData(initialExplorerData)
+    // Clear current project ID when logging out
+    localStorage.removeItem("roblox-ai-current-project")
   }
 
   const handleProjectSelect = (project: Project) => {
@@ -172,10 +194,15 @@ export default function RobloxAIStudio() {
       project.chatThreads = [defaultThread]
       project.activeThreadId = defaultThread.id
     }
+    isUpdatingProject.current = true
     setCurrentProject(project)
     setActiveThreadId(project.activeThreadId || project.chatThreads[0].id)
     setExplorerData(project.explorerData.length > 0 ? project.explorerData : initialExplorerData)
     setOpenScripts(project.openScripts || [])
+    projectStorage.saveProject(project)
+    // Save current project ID for persistence on refresh
+    localStorage.setItem("roblox-ai-current-project", project.id)
+    isUpdatingProject.current = false
 
     const activeThread = project.chatThreads.find((t) => t.id === (project.activeThreadId || project.chatThreads[0].id))
     setChatMessages(activeThread?.messages || [])
@@ -187,6 +214,8 @@ export default function RobloxAIStudio() {
     setOpenScripts([])
     setActiveScript(null)
     setChatMessages([])
+    // Clear current project ID when exiting
+    localStorage.removeItem("roblox-ai-current-project")
   }
 
   const handleItemSelect = (item: any) => {
@@ -226,6 +255,7 @@ export default function RobloxAIStudio() {
 
   const handleCreateThread = (name: string) => {
     if (!currentProject) return
+    isUpdatingProject.current = true
     const newThread = projectStorage.createChatThread(currentProject.id, name)
     const updatedProject = {
       ...currentProject,
@@ -236,12 +266,14 @@ export default function RobloxAIStudio() {
     setActiveThreadId(newThread.id)
     setChatMessages([])
     projectStorage.saveProject(updatedProject)
+    isUpdatingProject.current = false
     // Close the dialog after creating
     setShowChatManagement(false)
   }
 
   const handleSelectThread = (threadId: string) => {
     if (!currentProject) return
+    isUpdatingProject.current = true
     const thread = currentProject.chatThreads.find((t) => t.id === threadId)
     if (thread) {
       setActiveThreadId(threadId)
@@ -250,20 +282,24 @@ export default function RobloxAIStudio() {
       setCurrentProject(updatedProject)
       projectStorage.saveProject(updatedProject)
     }
+    isUpdatingProject.current = false
   }
 
   const handleRenameThread = (threadId: string, newName: string) => {
     if (!currentProject) return
+    isUpdatingProject.current = true
     const updatedThreads = currentProject.chatThreads.map((thread) =>
       thread.id === threadId ? { ...thread, name: newName } : thread,
     )
     const updatedProject = { ...currentProject, chatThreads: updatedThreads }
     setCurrentProject(updatedProject)
     projectStorage.saveProject(updatedProject)
+    isUpdatingProject.current = false
   }
 
   const handleDeleteThread = (threadId: string) => {
     if (!currentProject) return
+    isUpdatingProject.current = true
     const updatedThreads = currentProject.chatThreads.filter((thread) => thread.id !== threadId)
     if (updatedThreads.length === 0) {
       const defaultThread = projectStorage.createChatThread(currentProject.id, "Main Chat")
@@ -281,6 +317,7 @@ export default function RobloxAIStudio() {
       setChatMessages(updatedThreads[0].messages)
     }
     projectStorage.saveProject(updatedProject)
+    isUpdatingProject.current = false
   }
 
   const handleOwnerClick = () => {
@@ -306,7 +343,8 @@ export default function RobloxAIStudio() {
   }
 
   useEffect(() => {
-    if (currentProject && activeThreadId) {
+    if (currentProject && activeThreadId && !isUpdatingProject.current) {
+      isUpdatingProject.current = true
       const updatedThreads = currentProject.chatThreads.map((thread) =>
         thread.id === activeThreadId ? { ...thread, messages: chatMessages, lastModified: Date.now() } : thread,
       )
@@ -317,22 +355,26 @@ export default function RobloxAIStudio() {
         openScripts,
         lastModified: Date.now(),
       }
-      // Don't call setCurrentProject here - it causes infinite loop
+      setCurrentProject(updatedProject)
       projectStorage.saveProject(updatedProject)
+      isUpdatingProject.current = false
     }
-  }, [chatMessages, activeThreadId])
+  }, [chatMessages, activeThreadId, currentProject, explorerData, openScripts])
 
   useEffect(() => {
-    if (currentProject) {
+    if (currentProject && !isUpdatingProject.current) {
+      isUpdatingProject.current = true
       const updatedProject = {
         ...currentProject,
         explorerData,
         openScripts,
         lastModified: Date.now(),
       }
+      setCurrentProject(updatedProject)
       projectStorage.saveProject(updatedProject)
+      isUpdatingProject.current = false
     }
-  }, [explorerData, openScripts])
+  }, [explorerData, openScripts, currentProject])
 
   if (isLoading) {
     return (
